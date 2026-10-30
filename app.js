@@ -19,7 +19,7 @@
     insert(key){
       if(this.contains(key))return {ok:false,steps:[`Key ${key} already exists; duplicate ignored.`]};
       const steps=[];
-      if(this.root.children.length===0){this.root.keys.push(key);this.root.keys.sort((a,b)=>a-b);this.size++;return {ok:true,steps:[`Insert ${key} into the root leaf.`]};}
+
       const result=this._insert(this.root,key,steps);
       if(result){const old=this.root,n=new Node();n.keys=[result.key];n.children=[old,result.right];this.root=n;steps.push(`Root overflow: promote ${result.key} and create a new root.`);}
       this.size++;return {ok:true,steps};
