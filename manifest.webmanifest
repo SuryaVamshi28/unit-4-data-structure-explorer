@@ -1,0 +1,11 @@
+{
+  "name": "Unit IV Data Structure Explorer",
+  "short_name": "ADS Unit IV",
+  "description": "Interactive study guide for Unit IV multiway search trees and heaps.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f8fb",
+  "theme_color": "#10243a"
+}
+
