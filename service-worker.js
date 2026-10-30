@@ -1,4 +1,4 @@
-const CACHE = 'ads-unit4-explorer-v1';
+const CACHE = 'ads-unit4-explorer-v2';
 const FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
@@ -16,4 +16,3 @@ self.addEventListener('fetch', event => {
     return response;
   }).catch(() => caches.match('./index.html'))));
 });
-
