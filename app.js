@@ -112,7 +112,32 @@
   function showTT(i){if(!ttTimeline.length)return;stopTT();ttFrame=Math.max(0,Math.min(i,ttTimeline.length-1));const f=ttTimeline[ttFrame];drawTT();setMessage('ttFrame','Step '+(ttFrame+1)+' of '+ttTimeline.length+': '+f.label);chips('ttSteps',ttTimeline.slice(0,ttFrame+1).map(x=>x.label));$('ttPrev').disabled=ttFrame===0;$('ttNext').disabled=ttFrame===ttTimeline.length-1;$('ttPlay').disabled=ttFrame===ttTimeline.length-1;}
   function setTT(timeline){stopTT();ttTimeline=timeline;ttFrame=0;if(timeline.length)showTT(0);}
   $('ttInsert').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key.');return;}const r=tt.insert(x);setTT(r.timeline);setMessage('ttMessage','Insertion: '+r.steps.join(' '));};
-  $('ttDelete').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key to delete.');return;}const r=tt.delete(x);setTT(r.timeline);setMessage('ttMessage','Deletion: '+r.steps.join(' '));};
+  function delete23(key){
+    const before=cloneNode(tt.root),steps=[],timeline=[frame(before,'Before deleting '+key+'.')];
+    if(!tt.contains(key))return {ok:false,steps:['Key '+key+' was not found; tree unchanged.'],timeline:[frame(before,'Tree unchanged')]};
+    const record=label=>{steps.push(label);const f=frame(tt.root,label);timeline.push(f);};
+    const repair=(parent,index)=>{
+      const child=parent.children[index],left=index>0?parent.children[index-1]:null,right=index<parent.keys.length?parent.children[index+1]:null;
+      if(left&&left.keys.length===2){child.keys.unshift(parent.keys[index-1]);parent.keys[index-1]=left.keys.pop();if(left.children.length)child.children.unshift(left.children.pop());record('Borrow a key from the left 3-node sibling.');return;}
+      if(right&&right.keys.length===2){child.keys.push(parent.keys[index]);parent.keys[index]=right.keys.shift();if(right.children.length)child.children.push(right.children.shift());record('Borrow a key from the right 3-node sibling.');return;}
+      if(left){left.keys.push(parent.keys[index-1],...child.keys);if(child.children.length)left.children.push(...child.children);parent.keys.splice(index-1,1);parent.children.splice(index,1);record('Merge the empty child with its left 2-node sibling and the separator.');}
+      else if(right){child.keys.push(parent.keys[index],...right.keys);if(right.children.length)child.children.push(...right.children);parent.keys.splice(index,1);parent.children.splice(index+1,1);record('Merge the empty child with its right 2-node sibling and the separator.');}
+    };
+    const erase=(node,value)=>{
+      let i=0;while(i<node.keys.length&&node.keys[i]<value)i++;
+      if(i<node.keys.length&&node.keys[i]===value){
+        if(!node.children.length){node.keys.splice(i,1);record('Remove '+value+' from its leaf.');return;}
+        let pred=node.children[i];while(pred.children.length)pred=pred.children[pred.children.length-1];const previous=pred.keys[pred.keys.length-1];node.keys[i]=previous;record('Replace internal key '+value+' with predecessor '+previous+'.');erase(node.children[i],previous);if(node.children[i].keys.length===0)repair(node,i);return;
+      }
+      if(!node.children.length)return;
+      erase(node.children[i],value);if(node.children[i]&&node.children[i].keys.length===0)repair(node,i);
+    };
+    erase(tt.root,key);
+    if(tt.root.keys.length===0&&tt.root.children.length){tt.root=tt.root.children[0];record('Promote the only child to become the new root.');}
+    record('Deletion complete. Every node contains one or two keys and all leaves remain level.');
+    return {ok:true,steps,timeline};
+  }
+  $('ttDelete').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key to delete.');return;}const r=delete23(x);setTT(r.timeline);setMessage('ttMessage',r.steps.join(' '));};
   $('ttFind').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key to search.');return;}const frames=[];let n=tt.root,found=false;while(n){frames.push({root:cloneNode(tt.root),label:'Visit ['+n.keys.join(' | ')+'] and compare with '+x+'.',focus:n.keys.join('|')});let i=0;while(i<n.keys.length&&x>n.keys[i])i++;if(n.keys[i]===x){found=true;frames.push({root:cloneNode(tt.root),label:'Found '+x+'.',focus:n.keys.join('|')});break;}if(!n.children.length){frames.push({root:cloneNode(tt.root),label:x+' is not in this leaf interval.',focus:n.keys.join('|')});break;}n=n.children[i];}setTT(frames);setMessage('ttMessage',found?'Search found '+x+'.':'Search did not find '+x+'.');};
   $('ttPrev').onclick=()=>showTT(ttFrame-1);$('ttNext').onclick=()=>showTT(ttFrame+1);$('ttPlay').onclick=()=>{if(ttTimer){stopTT();return;}if(ttFrame>=ttTimeline.length-1)return;$('ttPlay').textContent='Pause';ttTimer=setInterval(()=>{if(ttFrame>=ttTimeline.length-1){stopTT();return;}ttFrame++;const f=ttTimeline[ttFrame];drawTT();setMessage('ttFrame','Step '+(ttFrame+1)+' of '+ttTimeline.length+': '+f.label);chips('ttSteps',ttTimeline.slice(0,ttFrame+1).map(x=>x.label));$('ttPrev').disabled=false;if(ttFrame===ttTimeline.length-1){$('ttNext').disabled=true;stopTT();}},Number($('ttSpeed').value));};
   $('ttInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('ttInsert').click();});$('ttReset').onclick=()=>{stopTT();tt=new BTree(2);ttTimeline=[];drawTT();chips('ttSteps',[]);setMessage('ttMessage','Tree reset. Insert keys to begin.');setMessage('ttFrame','Ready for the next operation.');$('ttPrev').disabled=true;$('ttNext').disabled=true;$('ttPlay').disabled=true;};drawTT();
