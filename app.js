@@ -90,10 +90,11 @@
   function stopBTimer(){if(bTimer){clearInterval(bTimer);bTimer=null;}const b=$('btreePlay');if(b)b.textContent='Play';}
   function drawB(){const root=bTimeline?bTimeline[bFrame].root:btree.root;drawTree('btreeCanvas',root,{highlight:bHighlight});}
   function drawBFrame(i){if(!bTimeline?.length)return;stopBTimer();bFrame=Math.max(0,Math.min(i,bTimeline.length-1));drawB();const f=bTimeline[bFrame],done=bFrame===bTimeline.length-1;setMessage('btreeFrame',`Step ${bFrame+1} of ${bTimeline.length}: ${f.label}`);setMessage('btreeMessage',done?`${bSummary} Operation complete.`:`${bSummary} Use Step Forward or Play to continue the visualization.`);$('btreePrev').disabled=bFrame===0;$('btreeNext').disabled=done;$('btreeSkip').disabled=done;$('btreePlay').disabled=done;}
+  function hideBTimeline(){stopBTimer();bTimeline=null;bFrame=0;bSummary='';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;$('btreePlay').textContent='Play';}
   function startBTimeline(timeline,steps,summary){stopBTimer();bTimeline=timeline;bFrame=0;bSummary=summary;chips('btreeSteps',steps);$('btreeFrame').textContent=`Step 1 of ${timeline.length}: ${timeline[0].label}`;setMessage('btreeMessage',`${summary} Use Step Forward or Play to watch the operation.`);drawB();$('btreePrev').disabled=true;$('btreeNext').disabled=timeline.length<2;$('btreeSkip').disabled=timeline.length<2;$('btreePlay').disabled=timeline.length<2;$('btreePlay').textContent='Play';}
   function bAction(kind){
     const x=safeNumber($('btreeInput').value);
-    if(kind==='print'){stopBTimer();bTimeline=null;const keys=btree.all();drawB();chips('btreeSteps',[keys.length?`In-order keys: ${keys.join(', ')}.`:'The tree is empty.']);setMessage('btreeMessage',keys.length?`Sorted keys: ${keys.join(' → ')}`:'The tree is empty.');return;}
+    if(kind==='print'){hideBTimeline();const keys=btree.all();drawB();chips('btreeSteps',[keys.length?`In-order keys: ${keys.join(', ')}.`:'The tree is empty.']);setMessage('btreeMessage',keys.length?`Sorted keys: ${keys.join(' → ')}`:'The tree is empty.');return;}
     if(x===null){setMessage('btreeMessage','Enter a whole-number key between −999999 and 999999.');return;}
     stopBTimer();bHighlight=null;
     if(kind==='insert'){
@@ -101,7 +102,7 @@
     }else if(kind==='delete'){
       const r=btree.delete(x);startBTimeline(r.timeline,r.steps,r.ok?`Deleted ${x}.`:r.steps.join(' '));
     }else{
-      bTimeline=null;const found=btree.contains(x);bHighlight=found?x:null;drawB();
+      hideBTimeline();const found=btree.contains(x);bHighlight=found?x:null;drawB();
       chips('btreeSteps',[`Compare ${x} at each visited node.`,found?`Found ${x}.`:`${x} is not in the tree.`]);
       setMessage('btreeMessage',found?`Found ${x} by following one root-to-leaf search path.`:`${x} was not found. Search ended at the matching leaf interval.`);
     }
