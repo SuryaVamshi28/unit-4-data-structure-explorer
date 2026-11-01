@@ -32,41 +32,35 @@
       return null;
     }
     delete(key){
-      const before=cloneNode(this.root),steps=[];
-      if(!this.contains(key))return {ok:false,steps:[`Key ${key} was not found; tree unchanged.`],timeline:[frame(before,'Tree unchanged')]};
+      const before=cloneNode(this.root),steps=[],timeline=[frame(before,'Before deleting '+key+'.')];
+      if(!this.contains(key))return {ok:false,steps:['Key '+key+' was not found; tree unchanged.'],timeline:[frame(before,'Tree unchanged')]};
       const minDegree=Math.ceil((this.maxKeys+1)/2);
-      this._delete(this.root,key,minDegree,steps);
-      if(this.root.keys.length===0&&this.root.children.length)this.root=this.root.children[0];
-      this.size--;steps.push(`Deletion complete; restore the root and occupancy rules.`);
-      return {ok:true,steps,timeline:[frame(before,`Before deleting ${key}`),frame(this.root,steps.at(-1))]};
+      this._delete(this.root,key,minDegree,steps,timeline);
+      if(this.root.keys.length===0&&this.root.children.length){this.root=this.root.children[0];steps.push('Promote the only child to be the new root.');timeline.push(frame(this.root,steps.at(-1)));}
+      this.size--;steps.push('Deletion complete; restore the root and occupancy rules.');timeline.push(frame(this.root,steps.at(-1)));
+      return {ok:true,steps,timeline};
     }
-    _delete(node,key,t,steps){
+    _delete(node,key,t,steps,timeline){
       let i=0;while(i<node.keys.length&&node.keys[i]<key)i++;
       if(i<node.keys.length&&node.keys[i]===key){
-        if(node.children.length===0){node.keys.splice(i,1);steps.push(`Remove ${key} from its leaf.`);return;}
-        if(node.children[i].keys.length>=t){let p=node.children[i];while(p.children.length)p=p.children.at(-1);const pred=p.keys.at(-1);node.keys[i]=pred;steps.push(`Replace internal key ${key} with predecessor ${pred}.`);this._delete(node.children[i],pred,t,steps);return;}
-        if(node.children[i+1].keys.length>=t){let s=node.children[i+1];while(s.children.length)s=s.children[0];const succ=s.keys[0];node.keys[i]=succ;steps.push(`Replace internal key ${key} with successor ${succ}.`);this._delete(node.children[i+1],succ,t,steps);return;}
-        steps.push(`Merge both children with separator ${key}.`);this._merge(node,i);this._delete(node.children[i],key,t,steps);return;
+        if(node.children.length===0){node.keys.splice(i,1);steps.push('Remove '+key+' from its leaf.');timeline.push(frame(this.root,steps.at(-1)));return;}
+        if(node.children[i].keys.length>=t){let p=node.children[i];while(p.children.length)p=p.children.at(-1);const pred=p.keys.at(-1);node.keys[i]=pred;steps.push('Replace internal key '+key+' with predecessor '+pred+'.');timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i],pred,t,steps,timeline);return;}
+        if(node.children[i+1].keys.length>=t){let s=node.children[i+1];while(s.children.length)s=s.children[0];const succ=s.keys[0];node.keys[i]=succ;steps.push('Replace internal key '+key+' with successor '+succ+'.');timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i+1],succ,t,steps,timeline);return;}
+        steps.push('Merge both children with separator '+key+'.');this._merge(node,i);timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i],key,t,steps,timeline);return;
       }
-      if(node.children.length===0){steps.push(`Key ${key} was not found in the leaf.`);return;}
+      if(node.children.length===0){steps.push('Key '+key+' was not found in the leaf.');timeline.push(frame(this.root,steps.at(-1)));return;}
       if(node.children[i].keys.length<t){
         if(i>0&&node.children[i-1].keys.length>=t){
-          const child=node.children[i],sibling=node.children[i-1];
-          child.keys.unshift(node.keys[i-1]);node.keys[i-1]=sibling.keys.pop();
-          if(sibling.children.length)child.children.unshift(sibling.children.pop());
-          steps.push(`Borrow a key from the left sibling before descending.`);
+          const child=node.children[i],sibling=node.children[i-1];child.keys.unshift(node.keys[i-1]);node.keys[i-1]=sibling.keys.pop();if(sibling.children.length)child.children.unshift(sibling.children.pop());steps.push('Borrow a key from the left sibling before descending.');timeline.push(frame(this.root,steps.at(-1)));
         }else if(i<node.keys.length&&node.children[i+1].keys.length>=t){
-          const child=node.children[i],sibling=node.children[i+1];
-          child.keys.push(node.keys[i]);node.keys[i]=sibling.keys.shift();
-          if(sibling.children.length)child.children.push(sibling.children.shift());
-          steps.push(`Borrow a key from the right sibling before descending.`);
+          const child=node.children[i],sibling=node.children[i+1];child.keys.push(node.keys[i]);node.keys[i]=sibling.keys.shift();if(sibling.children.length)child.children.push(sibling.children.shift());steps.push('Borrow a key from the right sibling before descending.');timeline.push(frame(this.root,steps.at(-1)));
         }else if(i<node.keys.length){
-          steps.push(`Merge the target child with its right sibling.`);this._merge(node,i);
+          steps.push('Merge the target child with its right sibling.');this._merge(node,i);timeline.push(frame(this.root,steps.at(-1)));
         }else{
-          steps.push(`Merge the target child with its left sibling.`);this._merge(node,i-1);i--;
+          steps.push('Merge the target child with its left sibling.');this._merge(node,i-1);timeline.push(frame(this.root,steps.at(-1)));i--;
         }
       }
-      this._delete(node.children[i],key,t,steps);
+      this._delete(node.children[i],key,t,steps,timeline);
     }
     _merge(parent,i){const left=parent.children[i],right=parent.children[i+1];left.keys.push(parent.keys[i],...right.keys);left.children.push(...right.children);parent.keys.splice(i,1);parent.children.splice(i+1,1);}
     contains(key){let n=this.root;while(n){let i=0;while(i<n.keys.length&&key>n.keys[i])i++;if(n.keys[i]===key)return true;n=n.children[i];}return false;}
