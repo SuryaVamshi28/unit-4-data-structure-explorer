@@ -1,5 +1,5 @@
-const CACHE = 'ads-unit4-explorer-v8';
-const FILES = ['./', './index.html', './styles.css?v=8', './app.js?v=8', './manifest.webmanifest'];
+const CACHE = 'ads-unit4-explorer-v9';
+const FILES = ['./', './index.html', './styles.css?v=9', './app.js?v=9', './manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
   self.skipWaiting();
