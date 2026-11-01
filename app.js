@@ -86,22 +86,20 @@
     host.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balanced search tree with ${nodes.length} visible nodes">${lines.join('')}${boxes}</svg>`;
   }
 
-  let btree=new BTree(3),bHighlight=null,bTimeline=null,bFrame=0,bTimer=null;
+  let btree=new BTree(3),bHighlight=null,bTimeline=null,bFrame=0,bTimer=null,bSummary='';
   function stopBTimer(){if(bTimer){clearInterval(bTimer);bTimer=null;}const b=$('btreePlay');if(b)b.textContent='Play';}
   function drawB(){const root=bTimeline?bTimeline[bFrame].root:btree.root;drawTree('btreeCanvas',root,{highlight:bHighlight});}
-  function drawBFrame(i){if(!bTimeline?.length)return;stopBTimer();bFrame=Math.max(0,Math.min(i,bTimeline.length-1));drawB();const f=bTimeline[bFrame];setMessage('btreeFrame',`Step ${bFrame+1} of ${bTimeline.length}: ${f.label}`);$('btreePrev').disabled=bFrame===0;$('btreeNext').disabled=bFrame===bTimeline.length-1;$('btreeSkip').disabled=bFrame===bTimeline.length-1;$('btreePlay').disabled=bFrame===bTimeline.length-1;}
-  function startBTimeline(timeline,steps){stopBTimer();bTimeline=timeline;bFrame=0;chips('btreeSteps',steps);$('btreeFrame').textContent=`Step 1 of ${timeline.length}: ${timeline[0].label}`;drawB();$('btreePrev').disabled=true;$('btreeNext').disabled=timeline.length<2;$('btreeSkip').disabled=timeline.length<2;$('btreePlay').disabled=timeline.length<2;$('btreePlay').textContent='Play';}
+  function drawBFrame(i){if(!bTimeline?.length)return;stopBTimer();bFrame=Math.max(0,Math.min(i,bTimeline.length-1));drawB();const f=bTimeline[bFrame],done=bFrame===bTimeline.length-1;setMessage('btreeFrame',`Step ${bFrame+1} of ${bTimeline.length}: ${f.label}`);setMessage('btreeMessage',done?`${bSummary} Operation complete.`:`${bSummary} Use Step Forward or Play to continue the visualization.`);$('btreePrev').disabled=bFrame===0;$('btreeNext').disabled=done;$('btreeSkip').disabled=done;$('btreePlay').disabled=done;}
+  function startBTimeline(timeline,steps,summary){stopBTimer();bTimeline=timeline;bFrame=0;bSummary=summary;chips('btreeSteps',steps);$('btreeFrame').textContent=`Step 1 of ${timeline.length}: ${timeline[0].label}`;setMessage('btreeMessage',`${summary} Use Step Forward or Play to watch the operation.`);drawB();$('btreePrev').disabled=true;$('btreeNext').disabled=timeline.length<2;$('btreeSkip').disabled=timeline.length<2;$('btreePlay').disabled=timeline.length<2;$('btreePlay').textContent='Play';}
   function bAction(kind){
     const x=safeNumber($('btreeInput').value);
     if(kind==='print'){stopBTimer();bTimeline=null;const keys=btree.all();drawB();chips('btreeSteps',[keys.length?`In-order keys: ${keys.join(', ')}.`:'The tree is empty.']);setMessage('btreeMessage',keys.length?`Sorted keys: ${keys.join(' → ')}`:'The tree is empty.');return;}
     if(x===null){setMessage('btreeMessage','Enter a whole-number key between −999999 and 999999.');return;}
     stopBTimer();bHighlight=null;
     if(kind==='insert'){
-      const r=btree.insert(x);startBTimeline(r.timeline,r.steps);
-      setMessage('btreeMessage',r.ok?`Inserted ${x}. Use Step Forward or Play to watch the leaf placement and any node splits.`:r.steps.join(' '));
+      const r=btree.insert(x);startBTimeline(r.timeline,r.steps,r.ok?`Inserted ${x}.`:r.steps.join(' '));
     }else if(kind==='delete'){
-      const r=btree.delete(x);startBTimeline(r.timeline,r.steps);
-      setMessage('btreeMessage',r.ok?`Deleted ${x}. Step through the occupancy repair.`:r.steps.join(' '));
+      const r=btree.delete(x);startBTimeline(r.timeline,r.steps,r.ok?`Deleted ${x}.`:r.steps.join(' '));
     }else{
       bTimeline=null;const found=btree.contains(x);bHighlight=found?x:null;drawB();
       chips('btreeSteps',[`Compare ${x} at each visited node.`,found?`Found ${x}.`:`${x} is not in the tree.`]);
@@ -111,7 +109,7 @@
   $('btreeInsert').onclick=()=>bAction('insert');$('btreeFind').onclick=()=>bAction('find');$('btreeDelete').onclick=()=>bAction('delete');$('btreePrint').onclick=()=>bAction('print');
   $('btreeInput').addEventListener('keydown',e=>{if(e.key==='Enter')bAction('insert');});
   $('btreePrev').onclick=()=>drawBFrame(bFrame-1);$('btreeNext').onclick=()=>drawBFrame(bFrame+1);$('btreeSkip').onclick=()=>drawBFrame(bTimeline.length-1);
-  $('btreePlay').onclick=()=>{if(!bTimeline||bFrame>=bTimeline.length-1)return;if(bTimer){stopBTimer();return;}$('btreePlay').textContent='Pause';bTimer=setInterval(()=>{if(bFrame>=bTimeline.length-1){stopBTimer();return;}bFrame++;drawB();$('btreeFrame').textContent=`Step ${bFrame+1} of ${bTimeline.length}: ${bTimeline[bFrame].label}`;$('btreePrev').disabled=false;if(bFrame===bTimeline.length-1){$('btreeNext').disabled=true;$('btreeSkip').disabled=true;stopBTimer();}},Number($('btreeSpeed').value));};
+  $('btreePlay').onclick=()=>{if(!bTimeline||bFrame>=bTimeline.length-1)return;if(bTimer){stopBTimer();return;}$('btreePlay').textContent='Pause';bTimer=setInterval(()=>{if(bFrame>=bTimeline.length-1){stopBTimer();return;}bFrame++;drawB();const done=bFrame===bTimeline.length-1;$('btreeFrame').textContent=`Step ${bFrame+1} of ${bTimeline.length}: ${bTimeline[bFrame].label}`;setMessage('btreeMessage',done?`${bSummary} Operation complete.`:`${bSummary} Use Step Forward or Play to continue the visualization.`);$('btreePrev').disabled=false;if(done){$('btreeNext').disabled=true;$('btreeSkip').disabled=true;stopBTimer();}},Number($('btreeSpeed').value));};
   $('btreeReset').onclick=()=>{stopBTimer();bTimeline=null;btree=new BTree(Number($('btreeDegree').value)*2-1);bHighlight=null;drawB();chips('btreeSteps',[]);setMessage('btreeMessage','Tree cleared. Insert a key to begin.');$('btreeFrame').textContent='Ready for the next operation.';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;};
   $('btreeDegree').onchange=()=>{$('btreeReset').click();};drawB();
 
