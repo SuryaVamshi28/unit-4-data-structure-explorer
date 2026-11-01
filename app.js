@@ -73,7 +73,7 @@
     all(){const out=[];const walk=n=>{if(!n)return;for(let i=0;i<n.keys.length;i++){if(n.children[i])walk(n.children[i]);out.push(n.keys[i]);}if(n.children[n.keys.length])walk(n.children[n.keys.length]);};walk(this.root);return out;}
   }
 
-  function drawTree(hostId,root,{leafOnly=false,highlight=null}={}){
+  function drawTree(hostId,root,{leafOnly=false,highlight=null,highlightNode=null}={}){
     const host=$(hostId);if(!host)return;
     if(!root||!root.keys?.length){host.innerHTML='<div class="muted">The tree is empty. Insert a key to start.</div>';return;}
     const nodes=[];let cursor=0,maxDepth=0,maxKeys=1;
@@ -82,13 +82,13 @@
     function place(n,depth){if(!n)return 0;maxDepth=Math.max(maxDepth,depth);let x;if(!n.children||!n.children.length){x=cursor*pitch+pitch/2;cursor++;}else{const xs=n.children.map(c=>place(c,depth+1));x=(xs[0]+xs[xs.length-1])/2;}nodes.push({n,depth,x});return x;}
     place(root,0);const width=Math.max(440,cursor*pitch),height=(maxDepth+1)*88+22;
     const lines=[];for(const item of nodes){const n=item.n;if(n.children)for(const c of n.children){const ch=nodes.find(e=>e.n===c);if(ch)lines.push(`<line x1="${item.x}" y1="${item.depth*88+44}" x2="${ch.x}" y2="${ch.depth*88+10}" stroke="#8ea8c2" stroke-width="2"/>`);}}
-    const boxes=nodes.map(({n,depth,x})=>{const y=depth*88+10,w=Math.max(48,n.keys.length*42+12),left=x-w/2;const texts=n.keys.map((k,i)=>`<text x="${left+12+i*42+15}" y="${y+23}" text-anchor="middle" font-size="12" font-family="DM Mono,monospace" fill="${k===highlight?'#c34646':'#204e89'}" font-weight="600">${escapeText(k)}</text>`).join('');return `<g><rect x="${left}" y="${y}" width="${w}" height="32" rx="6" fill="${n.children.length?'#eaf1ff':'#f4f8fc'}" stroke="${n.keys.includes(highlight)?'#e27963':'#9db6d3'}"/>${n.keys.slice(1).map((_,i)=>`<line x1="${left+42*(i+1)+6}" y1="${y}" x2="${left+42*(i+1)+6}" y2="${y+32}" stroke="#9db6d3"/>`).join('')}${texts}</g>`;}).join('');
+    const boxes=nodes.map(({n,depth,x})=>{const y=depth*88+10,w=Math.max(48,n.keys.length*42+12),left=x-w/2,activeNode=highlightNode===n.keys.join('|');const texts=n.keys.map((k,i)=>`<text x="${left+12+i*42+15}" y="${y+23}" text-anchor="middle" font-size="12" font-family="DM Mono,monospace" fill="${k===highlight?'#c34646':'#204e89'}" font-weight="600">${escapeText(k)}</text>`).join('');return `<g><rect x="${left}" y="${y}" width="${w}" height="32" rx="6" fill="${activeNode?'#ffe7a8':n.children.length?'#eaf1ff':'#f4f8fc'}" stroke="${activeNode?'#e18a14':n.keys.includes(highlight)?'#e27963':'#9db6d3'}" stroke-width="${activeNode?3:1}"/>${n.keys.slice(1).map((_,i)=>`<line x1="${left+42*(i+1)+6}" y1="${y}" x2="${left+42*(i+1)+6}" y2="${y+32}" stroke="#9db6d3"/>`).join('')}${texts}</g>`;}).join('');
     host.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balanced search tree with ${nodes.length} visible nodes">${lines.join('')}${boxes}</svg>`;
   }
 
   let btree=new BTree(3),bHighlight=null,bTimeline=null,bFrame=0,bTimer=null,bSummary='';
   function stopBTimer(){if(bTimer){clearInterval(bTimer);bTimer=null;}const b=$('btreePlay');if(b)b.textContent='Play';}
-  function drawB(){const root=bTimeline?bTimeline[bFrame].root:btree.root;drawTree('btreeCanvas',root,{highlight:bHighlight});}
+  function drawB(){const f=bTimeline?.[bFrame];const root=f?f.root:btree.root;drawTree('btreeCanvas',root,{highlight:bHighlight,highlightNode:f?.focus||null});}
   function drawBFrame(i){if(!bTimeline?.length)return;stopBTimer();bFrame=Math.max(0,Math.min(i,bTimeline.length-1));drawB();const f=bTimeline[bFrame],done=bFrame===bTimeline.length-1;setMessage('btreeFrame',`Step ${bFrame+1} of ${bTimeline.length}: ${f.label}`);setMessage('btreeMessage',done?`${bSummary} Operation complete.`:`${bSummary} Use Step Forward or Play to continue the visualization.`);$('btreePrev').disabled=bFrame===0;$('btreeNext').disabled=done;$('btreeSkip').disabled=done;$('btreePlay').disabled=done;}
   function hideBTimeline(){stopBTimer();bTimeline=null;bFrame=0;bSummary='';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;$('btreePlay').textContent='Play';}
   function startBTimeline(timeline,steps,summary){stopBTimer();bTimeline=timeline;bFrame=0;bSummary=summary;chips('btreeSteps',steps);$('btreeFrame').textContent=`Step 1 of ${timeline.length}: ${timeline[0].label}`;setMessage('btreeMessage',`${summary} Use Step Forward or Play to watch the operation.`);drawB();$('btreePrev').disabled=true;$('btreeNext').disabled=timeline.length<2;$('btreeSkip').disabled=timeline.length<2;$('btreePlay').disabled=timeline.length<2;$('btreePlay').textContent='Play';}
@@ -102,9 +102,7 @@
     }else if(kind==='delete'){
       const r=btree.delete(x);startBTimeline(r.timeline,r.steps,r.ok?`Deleted ${x}.`:r.steps.join(' '));
     }else{
-      hideBTimeline();const found=btree.contains(x);bHighlight=found?x:null;drawB();
-      chips('btreeSteps',[`Compare ${x} at each visited node.`,found?`Found ${x}.`:`${x} is not in the tree.`]);
-      setMessage('btreeMessage',found?`Found ${x} by following one root-to-leaf search path.`:`${x} was not found. Search ended at the matching leaf interval.`);
+      const trace=[];let n=btree.root,found=false;while(n){let i=0;trace.push({root:cloneNode(btree.root),label:'Visit node ['+n.keys.join(' | ')+'] and compare with '+x+'.',focus:n.keys.join('|')});while(i<n.keys.length&&x>n.keys[i])i++;if(n.keys[i]===x){found=true;trace.push({root:cloneNode(btree.root),label:'Found '+x+' in this node.',focus:n.keys.join('|')});break;}if(!n.children.length){trace.push({root:cloneNode(btree.root),label:x+' is absent from the leaf interval.',focus:n.keys.join('|')});break;}n=n.children[i];}bHighlight=found?x:null;startBTimeline(trace,trace.map(f=>f.label),found?'Search found '+x+'.':'Search did not find '+x+'.');
     }
   }
   $('btreeInsert').onclick=()=>bAction('insert');$('btreeFind').onclick=()=>bAction('find');$('btreeDelete').onclick=()=>bAction('delete');$('btreePrint').onclick=()=>bAction('print');
@@ -114,10 +112,15 @@
   $('btreeReset').onclick=()=>{stopBTimer();bTimeline=null;btree=new BTree(Number($('btreeDegree').value)*2-1);bHighlight=null;drawB();chips('btreeSteps',[]);setMessage('btreeMessage','Tree cleared. Insert a key to begin.');$('btreeFrame').textContent='Ready for the next operation.';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;};
   $('btreeDegree').onchange=()=>{$('btreeReset').click();};drawB();
 
-  let tt=new BTree(2);
-  function drawTT(){drawTree('ttCanvas',tt.root);}
-  $('ttInsert').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key.');return;}const r=tt.insert(x);chips('ttSteps',r.steps);setMessage('ttMessage',r.steps.join(' '));drawTT();};
-  $('ttInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('ttInsert').click();});$('ttReset').onclick=()=>{tt=new BTree(2);drawTT();chips('ttSteps',[]);setMessage('ttMessage','Tree reset. Insert keys to begin.');};drawTT();
+  let tt=new BTree(2),ttTimeline=[],ttFrame=0,ttTimer=null;
+  function stopTT(){if(ttTimer){clearInterval(ttTimer);ttTimer=null;}if($('ttPlay'))$('ttPlay').textContent='Play';}
+  function drawTT(){const f=ttTimeline[ttFrame];drawTree('ttCanvas',f?f.root:tt.root,{highlightNode:f?.focus||null});}
+  function showTT(i){if(!ttTimeline.length)return;stopTT();ttFrame=Math.max(0,Math.min(i,ttTimeline.length-1));const f=ttTimeline[ttFrame];drawTT();setMessage('ttFrame','Step '+(ttFrame+1)+' of '+ttTimeline.length+': '+f.label);chips('ttSteps',ttTimeline.slice(0,ttFrame+1).map(x=>x.label));$('ttPrev').disabled=ttFrame===0;$('ttNext').disabled=ttFrame===ttTimeline.length-1;$('ttPlay').disabled=ttFrame===ttTimeline.length-1;}
+  function setTT(timeline){stopTT();ttTimeline=timeline;ttFrame=0;if(timeline.length)showTT(0);}
+  $('ttInsert').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key.');return;}const r=tt.insert(x);setTT(r.timeline);setMessage('ttMessage','Insertion: '+r.steps.join(' '));};
+  $('ttFind').onclick=()=>{const x=safeNumber($('ttInput').value);if(x===null){setMessage('ttMessage','Enter a whole-number key to search.');return;}const frames=[];let n=tt.root,found=false;while(n){frames.push({root:cloneNode(tt.root),label:'Visit ['+n.keys.join(' | ')+'] and compare with '+x+'.',focus:n.keys.join('|')});let i=0;while(i<n.keys.length&&x>n.keys[i])i++;if(n.keys[i]===x){found=true;frames.push({root:cloneNode(tt.root),label:'Found '+x+'.',focus:n.keys.join('|')});break;}if(!n.children.length){frames.push({root:cloneNode(tt.root),label:x+' is not in this leaf interval.',focus:n.keys.join('|')});break;}n=n.children[i];}setTT(frames);setMessage('ttMessage',found?'Search found '+x+'.':'Search did not find '+x+'.');};
+  $('ttPrev').onclick=()=>showTT(ttFrame-1);$('ttNext').onclick=()=>showTT(ttFrame+1);$('ttPlay').onclick=()=>{if(ttTimer){stopTT();return;}$('ttPlay').textContent='Pause';ttTimer=setInterval(()=>{if(ttFrame>=ttTimeline.length-1){stopTT();return;}showTT(ttFrame+1);},Number($('ttSpeed').value));};
+  $('ttInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('ttInsert').click();});$('ttReset').onclick=()=>{stopTT();tt=new BTree(2);ttTimeline=[];drawTT();chips('ttSteps',[]);setMessage('ttMessage','Tree reset. Insert keys to begin.');setMessage('ttFrame','Ready for the next operation.');$('ttPrev').disabled=true;$('ttNext').disabled=true;$('ttPlay').disabled=true;};drawTT();
 
   const bstarSteps=[
     {nodes:[['Parent','[20]'],['Left child','[4 | 8 | 12]'],['Right sibling','[25 | 31]']],text:'A left child is full and needs one more key. The B* policy checks its adjacent sibling before splitting.'},
