@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Unit IV | Data Structure Explorer</title>
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -84,8 +84,8 @@
       <section class="view" id="view-binary">
         <div class="page-head"><div class="eyebrow">HEAPS · 01</div><h1>Binary heaps</h1><p>A binary heap is a complete binary tree stored compactly in an array. In a min-heap, each parent key is no greater than its children.</p></div>
         <div class="definition-grid"><article class="info-card"><h3>Shape property</h3><p>All levels are full except possibly the last, which fills from left to right. This lets an array represent the tree without pointers.</p></article><article class="info-card"><h3>Heap-order property</h3><p>For a min-heap, parent ≤ child. The minimum is at the root; the entire array is not sorted.</p></article><article class="info-card"><h3>Array formulas (0-based)</h3><p>Parent: ⌊(i−1)/2⌋ · Left: 2i+1 · Right: 2i+2</p></article></div>
-        <div class="explorer-card"><div class="explorer-top"><div><div class="eyebrow">TRY IT</div><h2>Insert and extract minimum</h2><p>Insertion bubbles upward. Extract-min moves the last item to the root and sifts it downward.</p></div><span class="live-tag">● INTERACTIVE</span></div><div class="controls"><label class="field">Priority <input id="heapInput" inputmode="numeric" placeholder="e.g. 18" maxlength="6"></label><button class="button primary" id="heapInsert">Insert</button><button class="button" id="heapExtract">Extract min</button><button class="button subtle" id="heapReset">Reset</button><button class="button subtle" id="heapDemo">Load example</button></div><div class="tree-canvas" id="heapCanvas" role="img" aria-label="Binary min-heap visualization"></div><div class="array-view" id="heapArray"></div><div class="operation-message" id="heapMessage" aria-live="polite">Insert priorities or load the example. Try 18, 9, 12, 4, 7, 15.</div><div class="step-list" id="heapSteps"></div></div>
-        <div class="table-wrap"><table><thead><tr><th>Operation</th><th>Time</th><th>Reason</th></tr></thead><tbody><tr><td>Peek minimum</td><td>O(1)</td><td>Minimum is root</td></tr><tr><td>Insert</td><td>O(log n)</td><td>At most one path to root</td></tr><tr><td>Extract minimum</td><td>O(log n)</td><td>At most one path to leaf</td></tr><tr><td>Build heap</td><td>O(n)</td><td>Bottom-up heapify</td></tr><tr><td>Search arbitrary key</td><td>O(n)</td><td>Heap order does not sort siblings/subtrees</td></tr></tbody></table></div>
+        <div class="explorer-card"><div class="explorer-top"><div><div class="eyebrow">TRY IT</div><h2>Min-heap and max-heap operations</h2><p>Step through each comparison and swap. Search highlights every visited node in level order because a heap does not globally sort arbitrary keys.</p></div><span class="live-tag">● INTERACTIVE</span></div><div class="controls"><label class="field">Mode <select id="heapMode"><option value="min">Min-heap</option><option value="max">Max-heap</option></select></label><label class="field">Priority <input id="heapInput" inputmode="numeric" placeholder="e.g. 18" maxlength="6"></label><button class="button primary" id="heapInsert">Insert</button><button class="button" id="heapExtract">Extract root</button><button class="button" id="heapFind">Search</button><button class="button subtle" id="heapReset">Reset</button><button class="button subtle" id="heapDemo">Load example</button></div><div class="tree-canvas" id="heapCanvas" role="img" aria-label="Binary min-heap or max-heap visualization"></div><div class="array-view" id="heapArray"></div><div class="animation-controls" aria-label="Heap animation controls"><button class="button subtle" id="heapPrev" disabled>Step Back</button><button class="button" id="heapPlay" disabled>Play</button><button class="button subtle" id="heapNext" disabled>Step Forward</button><button class="button subtle" id="heapEnd" disabled>Skip to End</button><label class="speed-field">Speed <select id="heapSpeed"><option value="1500">Slow</option><option value="900" selected>Normal</option><option value="450">Fast</option></select></label></div><div class="operation-message" id="heapFrame" aria-live="polite">Ready for the next operation.</div><div class="operation-message" id="heapMessage" aria-live="polite">Insert priorities or load the example. Try 18, 9, 12, 4, 7, 15.</div><div class="step-list" id="heapSteps"></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Operation</th><th>Time</th><th>Reason</th></tr></thead><tbody><tr><td>Peek root (min or max)</td><td>O(1)</td><td>Chosen priority extreme is root</td></tr><tr><td>Insert</td><td>O(log n)</td><td>At most one path to root</td></tr><tr><td>Extract root (min or max)</td><td>O(log n)</td><td>At most one path to leaf</td></tr><tr><td>Build heap</td><td>O(n)</td><td>Bottom-up heapify</td></tr><tr><td>Search arbitrary key</td><td>O(n)</td><td>Heap order does not sort siblings/subtrees</td></tr></tbody></table></div>
       </section>
 
       <section class="view" id="view-binomial">
@@ -116,7 +116,7 @@
       <footer class="footer"><span>UNIT IV · ADVANCED DATA STRUCTURES</span><span>Interactive study guide · Demonstration only</span></footer>
     </main>
   </div>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
   <script>if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(() => {});</script>
 </body>
 </html>
