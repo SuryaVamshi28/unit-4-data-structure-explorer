@@ -12,3 +12,6 @@
 .speed-field select{border:1px solid #d7e0e8;border-radius:7px;background:#fff;padding:7px 9px;color:var(--ink);font-size:12px}
 #btreeFrame{margin-top:7px}
 @media(max-width:700px){.animation-controls .button{flex:1;min-width:calc(50% - 8px)}.speed-field{margin:4px 0;width:100%;justify-content:space-between}.speed-field select{flex:1;max-width:190px}}
+
+.array-cell.array-active{background:#ffe7a8;border-color:#e18a14;color:#704300;box-shadow:0 0 0 2px #e18a1433}
+.leaf.leaf-active{background:#ffe7a8;border-color:#e18a14;color:#704300;box-shadow:0 0 0 2px #e18a1433}
