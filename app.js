@@ -17,7 +17,8 @@
   const cloneNode=n=>!n?null:{keys:[...n.keys],children:n.children.map(cloneNode)};
   const frame=(root,label)=>({root:cloneNode(root),label});
   class BTree {
-    constructor(maxKeys=3){this.maxKeys=maxKeys;this.root=new Node();this.size=0;}
+    // Order m means at most m children and m - 1 keys per node.
+    constructor(maxKeys=3){this.maxKeys=maxKeys;this.minKeys=Math.floor(maxKeys/2);this.root=new Node();this.size=0;}
     insert(key){
       if(this.contains(key))return {ok:false,steps:[`Key ${key} already exists; duplicate ignored.`],timeline:[frame(this.root,'Tree unchanged')]};
       const steps=[],timeline=[frame(this.root,`Before inserting ${key}`)];
@@ -34,35 +35,46 @@
     delete(key){
       const before=cloneNode(this.root),steps=[],timeline=[frame(before,'Before deleting '+key+'.')];
       if(!this.contains(key))return {ok:false,steps:['Key '+key+' was not found; tree unchanged.'],timeline:[frame(before,'Tree unchanged')]};
-      const minDegree=Math.ceil((this.maxKeys+1)/2);
-      this._delete(this.root,key,minDegree,steps,timeline);
-      if(this.root.keys.length===0&&this.root.children.length){this.root=this.root.children[0];steps.push('Promote the only child to be the new root.');timeline.push(frame(this.root,steps.at(-1)));}
-      this.size--;steps.push('Deletion complete; restore the root and occupancy rules.');timeline.push(frame(this.root,steps.at(-1)));
+      const record=label=>{steps.push(label);timeline.push(frame(this.root,label));};
+      this._delete(this.root,key,record);
+      if(this.root.keys.length===0&&this.root.children.length){this.root=this.root.children[0];record('Promote the only child to be the new root.');}
+      this.size--;record('Deletion complete; restore the root and occupancy rules.');
       return {ok:true,steps,timeline};
     }
-    _delete(node,key,t,steps,timeline){
+    _delete(node,key,record){
       let i=0;while(i<node.keys.length&&node.keys[i]<key)i++;
       if(i<node.keys.length&&node.keys[i]===key){
-        if(node.children.length===0){node.keys.splice(i,1);steps.push('Remove '+key+' from its leaf.');timeline.push(frame(this.root,steps.at(-1)));return;}
-        if(node.children[i].keys.length>=t){let p=node.children[i];while(p.children.length)p=p.children.at(-1);const pred=p.keys.at(-1);node.keys[i]=pred;steps.push('Replace internal key '+key+' with predecessor '+pred+'.');timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i],pred,t,steps,timeline);return;}
-        if(node.children[i+1].keys.length>=t){let s=node.children[i+1];while(s.children.length)s=s.children[0];const succ=s.keys[0];node.keys[i]=succ;steps.push('Replace internal key '+key+' with successor '+succ+'.');timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i+1],succ,t,steps,timeline);return;}
-        steps.push('Merge both children with separator '+key+'.');this._merge(node,i);timeline.push(frame(this.root,steps.at(-1)));this._delete(node.children[i],key,t,steps,timeline);return;
+        if(!node.children.length){node.keys.splice(i,1);record('Remove '+key+' from its leaf.');return;}
+        let pred=node.children[i];while(pred.children.length)pred=pred.children[pred.children.length-1];
+        const replacement=pred.keys[pred.keys.length-1];node.keys[i]=replacement;record('Replace internal key '+key+' with predecessor '+replacement+'.');
+        this._delete(node.children[i],replacement,record);this._repair(node,i,record);return;
       }
-      if(node.children.length===0){steps.push('Key '+key+' was not found in the leaf.');timeline.push(frame(this.root,steps.at(-1)));return;}
-      if(node.children[i].keys.length<t){
-        if(i>0&&node.children[i-1].keys.length>=t){
-          const child=node.children[i],sibling=node.children[i-1];child.keys.unshift(node.keys[i-1]);node.keys[i-1]=sibling.keys.pop();if(sibling.children.length)child.children.unshift(sibling.children.pop());steps.push('Borrow a key from the left sibling before descending.');timeline.push(frame(this.root,steps.at(-1)));
-        }else if(i<node.keys.length&&node.children[i+1].keys.length>=t){
-          const child=node.children[i],sibling=node.children[i+1];child.keys.push(node.keys[i]);node.keys[i]=sibling.keys.shift();if(sibling.children.length)child.children.push(sibling.children.shift());steps.push('Borrow a key from the right sibling before descending.');timeline.push(frame(this.root,steps.at(-1)));
-        }else if(i<node.keys.length){
-          steps.push('Merge the target child with its right sibling.');this._merge(node,i);timeline.push(frame(this.root,steps.at(-1)));
-        }else{
-          steps.push('Merge the target child with its left sibling.');this._merge(node,i-1);timeline.push(frame(this.root,steps.at(-1)));i--;
-        }
-      }
-      this._delete(node.children[i],key,t,steps,timeline);
+      if(!node.children.length){record('Key '+key+' was not found in the leaf.');return;}
+      this._delete(node.children[i],key,record);this._repair(node,i,record);
     }
-    _merge(parent,i){const left=parent.children[i],right=parent.children[i+1];left.keys.push(parent.keys[i],...right.keys);left.children.push(...right.children);parent.keys.splice(i,1);parent.children.splice(i+1,1);}
+    _repair(parent,i,record){
+      const child=parent.children[i];if(!child||child.keys.length>=this.minKeys)return;
+      const left=i>0?parent.children[i-1]:null,right=i<parent.children.length-1?parent.children[i+1]:null;
+      if(left&&left.keys.length>this.minKeys){
+        child.keys.unshift(parent.keys[i-1]);parent.keys[i-1]=left.keys.pop();
+        if(left.children.length)child.children.unshift(left.children.pop());
+        record('Borrow from the left sibling and update the parent separator.');return;
+      }
+      if(right&&right.keys.length>this.minKeys){
+        child.keys.push(parent.keys[i]);parent.keys[i]=right.keys.shift();
+        if(right.children.length)child.children.push(right.children.shift());
+        record('Borrow from the right sibling and update the parent separator.');return;
+      }
+      if(left){
+        left.keys.push(parent.keys[i-1],...child.keys);left.children.push(...child.children);
+        parent.keys.splice(i-1,1);parent.children.splice(i,1);
+        record('Merge with the left sibling and pull down the parent separator.');
+      }else if(right){
+        child.keys.push(parent.keys[i],...right.keys);child.children.push(...right.children);
+        parent.keys.splice(i,1);parent.children.splice(i+1,1);
+        record('Merge with the right sibling and pull down the parent separator.');
+      }
+    }
     contains(key){let n=this.root;while(n){let i=0;while(i<n.keys.length&&key>n.keys[i])i++;if(n.keys[i]===key)return true;n=n.children[i];}return false;}
     all(){const out=[];const walk=n=>{if(!n)return;for(let i=0;i<n.keys.length;i++){if(n.children[i])walk(n.children[i]);out.push(n.keys[i]);}if(n.children[n.keys.length])walk(n.children[n.keys.length]);};walk(this.root);return out;}
   }
@@ -103,7 +115,7 @@
   $('btreeInput').addEventListener('keydown',e=>{if(e.key==='Enter')bAction('insert');});
   $('btreePrev').onclick=()=>drawBFrame(bFrame-1);$('btreeNext').onclick=()=>drawBFrame(bFrame+1);$('btreeSkip').onclick=()=>drawBFrame(bTimeline.length-1);
   $('btreePlay').onclick=()=>{if(!bTimeline||bFrame>=bTimeline.length-1)return;if(bTimer){stopBTimer();return;}$('btreePlay').textContent='Pause';bTimer=setInterval(()=>{if(bFrame>=bTimeline.length-1){stopBTimer();return;}bFrame++;drawB();const done=bFrame===bTimeline.length-1;$('btreeFrame').textContent=`Step ${bFrame+1} of ${bTimeline.length}: ${bTimeline[bFrame].label}`;setMessage('btreeMessage',done?`${bSummary} Operation complete.`:`${bSummary} Use Step Forward or Play to continue the visualization.`);$('btreePrev').disabled=false;if(done){$('btreeNext').disabled=true;$('btreeSkip').disabled=true;stopBTimer();}},Number($('btreeSpeed').value));};
-  $('btreeReset').onclick=()=>{stopBTimer();bTimeline=null;btree=new BTree(Number($('btreeDegree').value)*2-1);bHighlight=null;drawB();chips('btreeSteps',[]);setMessage('btreeMessage','Tree cleared. Insert a key to begin.');$('btreeFrame').textContent='Ready for the next operation.';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;};
+  $('btreeReset').onclick=()=>{stopBTimer();bTimeline=null;btree=new BTree(Number($('btreeDegree').value)-1);bHighlight=null;drawB();chips('btreeSteps',[]);setMessage('btreeMessage','Tree cleared. Insert a key to begin.');$('btreeFrame').textContent='Ready for the next operation.';$('btreePrev').disabled=true;$('btreeNext').disabled=true;$('btreeSkip').disabled=true;$('btreePlay').disabled=true;};
   $('btreeDegree').onchange=()=>{$('btreeReset').click();};drawB();
 
   let tt=new BTree(2),ttTimeline=[],ttFrame=0,ttTimer=null;
@@ -153,7 +165,7 @@
   $('bstarBack').onclick=()=>{stopBstar();bstarAt=Math.max(0,bstarAt-1);paintBstar();};$('bstarNext').onclick=()=>{stopBstar();bstarAt=Math.min(bstarSteps.length-1,bstarAt+1);paintBstar();};$('bstarPlay').onclick=()=>{if(bstarTimer){stopBstar();return;}if(bstarAt>=bstarSteps.length-1)return;$('bstarPlay').textContent='Pause';bstarTimer=setInterval(()=>{if(bstarAt>=bstarSteps.length-1){stopBstar();return;}bstarAt++;paintBstar();if(bstarAt===bstarSteps.length-1)stopBstar();},Number($('bstarSpeed').value));};$('bstarReset').onclick=()=>{stopBstar();bstarAt=0;paintBstar();};paintBstar();
 
   class BPNode{constructor(leaf=true){this.leaf=leaf;this.keys=[];this.children=[];this.next=null;}}
-  class BPlus{constructor(maxLeaf=3,maxChildren=4){this.maxLeaf=maxLeaf;this.maxChildren=maxChildren;this.root=new BPNode(true);this.size=0;}
+  class BPlus{constructor(order=4){this.order=order;this.maxLeaf=order-1;this.maxChildren=order;this.root=new BPNode(true);this.size=0;}
     first(n){while(!n.leaf)n=n.children[0];return n.keys[0];}
     refresh(n){n.keys=n.children.slice(1).map(c=>this.first(c));}
     insert(k){if(this.has(k))return {steps:[`Key ${k} already exists; duplicate ignored.`]};let steps=[];const split=this._ins(this.root,k,steps);if(split){const r=new BPNode(false);r.children=[this.root,split];this.refresh(r);this.root=r;steps.push('Root split: create a new internal root.');}this.size++;return {steps};}
@@ -176,7 +188,7 @@
   $('bpPrint').onclick=()=>{const leaves=bpLeaves();if(!leaves.length){setMessage('bpMessage','The tree is empty.');return;}bpStart(leaves.map((l,i)=>({root:bp.root,leaf:i,focus:null,label:'Read leaf '+(i+1)+' of '+leaves.length+': ['+l.keys.join(' | ')+']',text:'Move through the linked leaves from left to right.'})).concat([{root:bp.root,leaf:leaves.length-1,label:'Traversal complete.',text:'Sorted keys: '+leaves.flatMap(l=>l.keys).join(' → ')}]));};
   $('bpRange').onclick=()=>{const a=safeNumber($('bpFrom').value),b=safeNumber($('bpTo').value);if(a===null||b===null||a>b){setMessage('bpMessage','Enter valid bounds with From ≤ To.');return;}const leaves=bpLeaves(),frames=[];let n=bp.root;while(!n.leaf){let i=0;while(i<n.keys.length&&a>=n.keys[i])i++;frames.push({root:bp.root,focus:n.keys.join('|'),label:'Follow separator range '+(i+1)+' for lower bound '+a+'.',text:'Descend toward the first key in the requested range.'});n=n.children[i];}let li=leaves.indexOf(n),got=[];for(let i=li;i<leaves.length;i++){const vals=leaves[i].keys.filter(k=>k>=a&&k<=b);got.push(...vals);frames.push({root:bp.root,leaf:i,focus:leaves[i].keys.join('|'),label:'Scan leaf '+(i+1)+': ['+leaves[i].keys.join(' | ')+']',text:'Keep values from '+a+' through '+b+'; follow the next-leaf pointer.'});if(leaves[i].keys.some(k=>k>b))break;}frames.push({root:bp.root,leaf:Math.min(li,leaves.length-1),label:'Range scan complete.',text:'Inclusive range result: '+(got.length?got.join(', '):'no keys found')+'.'});bpStart(frames);};
   $('bpPrev').onclick=()=>bpShow(bpFrame-1);$('bpNext').onclick=()=>bpShow(bpFrame+1);$('bpEnd').onclick=()=>bpShow(bpTimeline.length-1);$('bpPlay').onclick=()=>{if(bpTimer){stopBP();return;}if(bpFrame>=bpTimeline.length-1)return;$('bpPlay').textContent='Pause';bpTimer=setInterval(()=>{if(bpFrame>=bpTimeline.length-1){stopBP();return;}bpFrame++;const f=bpTimeline[bpFrame];bpDraw(f.root,f);setMessage('bpFrame','Step '+(bpFrame+1)+' of '+bpTimeline.length+': '+f.label);setMessage('bpMessage',f.text);chips('bpSteps',bpTimeline.slice(0,bpFrame+1).map(x=>x.label));$('bpPrev').disabled=false;if(bpFrame===bpTimeline.length-1){$('bpNext').disabled=true;$('bpEnd').disabled=true;stopBP();}},Number($('bpSpeed').value));};
-  $('bpReset').onclick=()=>{stopBP();bp=new BPlus();bpTimeline=[];bpDraw();chips('bpSteps',[]);setMessage('bpMessage','Tree reset. Insert keys to begin.');setMessage('bpFrame','Ready for the next operation.');$('bpPrev').disabled=true;$('bpNext').disabled=true;$('bpPlay').disabled=true;$('bpEnd').disabled=true;};bpDraw();
+  $('bpReset').onclick=()=>{stopBP();bp=new BPlus(Number($('bpOrder').value));bpTimeline=[];bpDraw();chips('bpSteps',[]);setMessage('bpMessage','Tree reset. Insert keys to begin.');setMessage('bpFrame','Ready for the next operation.');$('bpPrev').disabled=true;$('bpNext').disabled=true;$('bpPlay').disabled=true;$('bpEnd').disabled=true;};$('bpOrder').onchange=()=>{$('bpReset').click();};bpDraw();
 
   function svgTree(roots,hostId,opt={}){
     const host=$(hostId);if(!host)return;if(!roots.length){host.innerHTML='<div class="muted">Heap is empty.</div>';return;}
