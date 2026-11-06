@@ -45,12 +45,25 @@
       let i=0;while(i<node.keys.length&&node.keys[i]<key)i++;
       if(i<node.keys.length&&node.keys[i]===key){
         if(!node.children.length){node.keys.splice(i,1);record('Remove '+key+' from its leaf.');return;}
-        let pred=node.children[i];while(pred.children.length)pred=pred.children[pred.children.length-1];
-        const replacement=pred.keys[pred.keys.length-1];node.keys[i]=replacement;record('Replace internal key '+key+' with predecessor '+replacement+'.');
-        this._delete(node.children[i],replacement,record);this._repair(node,i,record);return;
+        const leftKeys=this._subtreeKeys(node.children[i]);
+        if(leftKeys.length){
+          const value=leftKeys[leftKeys.length-1];node.keys[i]=value;record('Replace internal key '+key+' with predecessor '+value+'.');
+          this._delete(node.children[i],value,record);this._repair(node,i,record);return;
+        }
+        const rightKeys=this._subtreeKeys(node.children[i+1]);
+        if(rightKeys.length){
+          const value=rightKeys[0];node.keys[i]=value;record('Replace internal key '+key+' with successor '+value+'.');
+          this._delete(node.children[i+1],value,record);this._repair(node,i+1,record);return;
+        }
+        this._merge(node,i);record('Merge the empty children with separator '+key+'.');
+        this._delete(node.children[i],key,record);this._repair(node,i,record);return;
       }
       if(!node.children.length){record('Key '+key+' was not found in the leaf.');return;}
       this._delete(node.children[i],key,record);this._repair(node,i,record);
+    }
+    _merge(parent,i){const left=parent.children[i],right=parent.children[i+1];left.keys.push(parent.keys[i],...right.keys);left.children.push(...right.children);parent.keys.splice(i,1);parent.children.splice(i+1,1);}
+    _subtreeKeys(root){
+      const out=[];const walk=n=>{for(let i=0;i<n.keys.length;i++){if(n.children[i])walk(n.children[i]);out.push(n.keys[i]);}if(n.children[n.keys.length])walk(n.children[n.keys.length]);};walk(root);return out;
     }
     _repair(parent,i,record){
       const child=parent.children[i];if(!child||child.keys.length>=this.minKeys)return;
