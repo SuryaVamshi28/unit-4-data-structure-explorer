@@ -186,12 +186,70 @@
   $('bstarBack').onclick=()=>{stopBstar();bstarAt=Math.max(0,bstarAt-1);paintBstar();};$('bstarNext').onclick=()=>{stopBstar();bstarAt=Math.min(bstarSteps.length-1,bstarAt+1);paintBstar();};$('bstarPlay').onclick=()=>{if(bstarTimer){stopBstar();return;}if(bstarAt>=bstarSteps.length-1)return;$('bstarPlay').textContent='Pause';bstarTimer=setInterval(()=>{if(bstarAt>=bstarSteps.length-1){stopBstar();return;}bstarAt++;paintBstar();if(bstarAt===bstarSteps.length-1)stopBstar();},Number($('bstarSpeed').value));};$('bstarReset').onclick=()=>{stopBstar();bstarAt=0;paintBstar();};paintBstar();
 
   class BPNode{constructor(leaf=true){this.leaf=leaf;this.keys=[];this.children=[];this.next=null;}}
-  class BPlus{constructor(order=4){this.order=order;this.maxLeaf=order-1;this.maxChildren=order;this.root=new BPNode(true);this.size=0;}
-    first(n){while(!n.leaf)n=n.children[0];return n.keys[0];}
-    refresh(n){n.keys=n.children.slice(1).map(c=>this.first(c));}
+  class BPlus{constructor(order=4){this.order=order;this.maxLeaf=order-1;this.maxChildren=order;this.minLeaf=order===2?0:Math.ceil((order-1)/2);this.minChildren=Math.ceil(order/2);this.root=new BPNode(true);this.size=0;}
+    first(n){if(n.leaf)return n.keys[0];for(const child of n.children){const key=this.first(child);if(key!==undefined)return key;}return undefined;}
+    refresh(n){const previous=n.keys.slice();n.keys=n.children.slice(1).map((child,i)=>{const key=this.first(child);return key===undefined?previous[i]:key;});}
     insert(k){if(this.has(k))return {steps:[`Key ${k} already exists; duplicate ignored.`]};let steps=[];const split=this._ins(this.root,k,steps);if(split){const r=new BPNode(false);r.children=[this.root,split];this.refresh(r);this.root=r;steps.push('Root split: create a new internal root.');}this.size++;return {steps};}
     _ins(n,k,steps){if(n.leaf){let i=0;while(i<n.keys.length&&n.keys[i]<k)i++;n.keys.splice(i,0,k);steps.push(`Insert ${k} in its sorted leaf.`);if(n.keys.length>this.maxLeaf){const r=new BPNode(true),cut=Math.ceil(n.keys.length/2);r.keys=n.keys.splice(cut);r.next=n.next;n.next=r;steps.push(`Leaf overflow: split keys into ${n.keys.join(', ')} and ${r.keys.join(', ')}; link the leaves.`);return r;}return null;}
       let i=0;while(i<n.keys.length&&k>=n.keys[i])i++;steps.push(`At internal separators [${n.keys.join(' | ')}], descend to child ${i+1}.`);const r=this._ins(n.children[i],k,steps);if(r)n.children.splice(i+1,0,r);this.refresh(n);if(n.children.length>this.maxChildren){const right=new BPNode(false),cut=Math.ceil(n.children.length/2);right.children=n.children.splice(cut);this.refresh(n);this.refresh(right);steps.push('Internal overflow: split child pointers and recompute separator keys.');return right;}return null;}
+    delete(k){
+      const steps=[],timeline=[{root:cloneBP(this.root),label:'Before deleting '+k+'.',text:'Start at the root and follow separator keys to the target leaf.'}];
+      const record=(label,text,focus=null,leaf=null,key=null)=>{steps.push(label);timeline.push({root:cloneBP(this.root),label,text,focus,leaf,key});};
+      const found=this._delete(this.root,k,record);
+      if(!found)return {ok:false,steps,timeline};
+      this.size--;
+      if(this.size===0){this.root=new BPNode(true);record('The last key was removed.','The B+ tree is now empty.');return {ok:true,steps,timeline};}
+      while(!this.root.leaf&&this.root.children.length===1){this.root=this.root.children[0];record('Collapse the root.','The root had one child after rebalancing; promote that child as the new root.');}
+      record('Deletion complete.','Leaf occupancy, separators, and linked-leaf pointers are restored.');
+      return {ok:true,steps,timeline};
+    }
+    _delete(node,k,record){
+      if(node.leaf){
+        const leafIndex=bpLeaves(this.root).indexOf(node);
+        record('Reach leaf ['+node.keys.join(' | ')+'].','Check the sorted leaf for '+k+'.',node.keys.join('|'),leafIndex,k);
+        const at=node.keys.indexOf(k);
+        if(at<0){record('Key '+k+' was not found.','The target leaf does not contain '+k+'; the tree is unchanged.',node.keys.join('|'),leafIndex);return false;}
+        node.keys.splice(at,1);record('Remove '+k+' from its leaf.','The leaf may now need to borrow a key or merge with a sibling.',node.keys.join('|'),leafIndex,k);
+        return true;
+      }
+      let i=0;while(i<node.keys.length&&k>=node.keys[i])i++;
+      record('Visit separators ['+node.keys.join(' | ')+'].','Compare '+k+' and descend to child '+(i+1)+'.',node.keys.join('|'));
+      const found=this._delete(node.children[i],k,record);if(!found)return false;
+      this._repairAfterDelete(node,i,record);
+      const old=node.keys.join('|');this.refresh(node);
+      if(old!==node.keys.join('|'))record('Refresh parent separators.','Separators now equal the first key in each right-hand child.',node.keys.join('|'));
+      return true;
+    }
+    _repairAfterDelete(parent,i,record){
+      const child=parent.children[i];if(!child)return;
+      const underflow=child.leaf?child.keys.length<this.minLeaf:child.children.length<this.minChildren;
+      if(!underflow)return;
+      const left=i>0?parent.children[i-1]:null,right=i<parent.children.length-1?parent.children[i+1]:null;
+      const sameType=n=>n&&n.leaf===child.leaf;
+      const occupancy=n=>n.leaf?n.keys.length:n.children.length;
+      if(sameType(left)&&occupancy(left)>(left.leaf?this.minLeaf:this.minChildren)){
+        if(child.leaf){child.keys.unshift(left.keys.pop());}
+        else{child.children.unshift(left.children.pop());this.refresh(left);this.refresh(child);}
+        this.refresh(parent);record('Borrow from the left sibling.','Move its largest key or rightmost child into the underfull node, then update separators.',parent.keys.join('|'));return;
+      }
+      if(sameType(right)&&occupancy(right)>(right.leaf?this.minLeaf:this.minChildren)){
+        if(child.leaf){child.keys.push(right.keys.shift());}
+        else{child.children.push(right.children.shift());this.refresh(right);this.refresh(child);}
+        this.refresh(parent);record('Borrow from the right sibling.','Move its smallest key or leftmost child into the underfull node, then update separators.',parent.keys.join('|'));return;
+      }
+      if(sameType(left)){
+        if(child.leaf){left.keys.push(...child.keys);left.next=child.next;}
+        else{left.children.push(...child.children);this.refresh(left);}
+        parent.children.splice(i,1);this.refresh(parent);
+        record(child.leaf?'Merge leaves into the left sibling.':'Merge internal children into the left sibling.',child.leaf?'Append the leaf keys and reconnect the next-leaf pointer.':'Combine child pointers and rebuild separators.',parent.keys.join('|'));return;
+      }
+      if(sameType(right)){
+        if(child.leaf){child.keys.push(...right.keys);child.next=right.next;}
+        else{child.children.push(...right.children);this.refresh(child);}
+        parent.children.splice(i+1,1);this.refresh(parent);
+        record(child.leaf?'Merge the right leaf into this leaf.':'Merge the right internal node into this node.',child.leaf?'Append the leaf keys and bypass the removed leaf in the linked list.':'Combine child pointers and rebuild separators.',parent.keys.join('|'));
+      }
+    }
     has(k){let n=this.root;while(!n.leaf){let i=0;while(i<n.keys.length&&k>=n.keys[i])i++;n=n.children[i];}return n.keys.includes(k);}
     leaves(){let n=this.root;while(!n.leaf)n=n.children[0];const a=[];while(n){a.push(n);n=n.next;}return a;}
     range(a,b){return this.leaves().flatMap(l=>l.keys).filter(k=>k>=a&&k<=b);}
@@ -200,10 +258,11 @@
   function stopBP(){if(bpTimer){clearInterval(bpTimer);bpTimer=null;}if($('bpPlay'))$('bpPlay').textContent='Play';}
   function cloneBP(root){const map=new Map();function cp(n){if(!n)return null;const x=new BPNode(n.leaf);x.keys=n.keys.slice();x.children=n.children.map(cp);map.set(n,x);return x;}const copy=cp(root);let cur=root;while(cur&&!cur.leaf)cur=cur.children[0];while(cur){const c=map.get(cur),next=cur.next;c.next=next?map.get(next):null;cur=next;}return copy;}
   function bpLeaves(root=bp.root){let n=root;while(n&&!n.leaf)n=n.children[0];const a=[];while(n){a.push(n);n=n.next;}return a;}
-  function bpDraw(root=bp.root,opt={}){drawTree('bpCanvas',root,{highlightNode:opt.focus||null,highlight:opt.key??null,leafLinks:true});$('bpLeaves').innerHTML=bpLeaves(root).map((l,i)=>'<span class="leaf '+(i===opt.leaf?'leaf-active':'')+'">['+l.keys.map(escapeText).join(' | ')+']</span>').join('')||'<span class="muted">No leaves yet</span>';}
+  function bpDraw(root=bp.root,opt={}){drawTree('bpCanvas',root,{highlightNode:opt.focus||null,highlight:opt.key??null,leafLinks:true});const leaves=bpLeaves(root);$('bpLeaves').innerHTML=leaves.some(l=>l.keys.length)?leaves.map((l,i)=>'<span class="leaf '+(i===opt.leaf?'leaf-active':'')+'">['+l.keys.map(escapeText).join(' | ')+']</span>').join(''):'<span class="muted">No keys stored in leaves</span>';}
   function bpShow(i){if(!bpTimeline.length)return;stopBP();bpFrame=Math.max(0,Math.min(i,bpTimeline.length-1));const f=bpTimeline[bpFrame];bpDraw(f.root,f);setMessage('bpFrame','Step '+(bpFrame+1)+' of '+bpTimeline.length+': '+f.label);setMessage('bpMessage',f.text);chips('bpSteps',bpTimeline.slice(0,bpFrame+1).map(x=>x.label));$('bpPrev').disabled=bpFrame===0;$('bpNext').disabled=bpFrame===bpTimeline.length-1;$('bpPlay').disabled=bpFrame===bpTimeline.length-1;$('bpEnd').disabled=bpFrame===bpTimeline.length-1;}
   function bpStart(frames){stopBP();bpTimeline=frames;bpFrame=0;if(frames.length){bpShow(0);if(frames.length>1)$('bpPlay').click();}}
   $('bpInsert').onclick=()=>{const x=safeNumber($('bpInput').value);if(x===null){setMessage('bpMessage','Enter a whole-number key.');return;}const before=cloneBP(bp.root),path=[];let n=bp.root;while(!n.leaf){let i=0;while(i<n.keys.length&&x>=n.keys[i])i++;path.push({root:before,focus:n.keys.join('|'),label:'At internal separators ['+n.keys.join(' | ')+']',text:'Choose child '+(i+1)+' for key '+x+'.'});n=n.children[i];}path.push({root:before,focus:n.keys.join('|'),label:'Reach leaf ['+n.keys.join(' | ')+']',text:'Insert '+x+' in sorted leaf order; split on overflow if needed.'});const r=bp.insert(x),after=cloneBP(bp.root);path.push({root:after,focus:null,label:'Insertion complete.',text:r.steps.join(' ')});bpStart(path);};
+  $('bpDelete').onclick=()=>{const x=safeNumber($('bpInput').value);if(x===null){setMessage('bpMessage','Enter a whole-number key to delete.');return;}const r=bp.delete(x);bpStart(r.timeline);};
   $('bpInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('bpInsert').click();});
   $('bpFind').onclick=()=>{const x=safeNumber($('bpInput').value);if(x===null){setMessage('bpMessage','Enter a whole-number key.');return;}const frames=[];let n=bp.root;while(!n.leaf){let i=0;while(i<n.keys.length&&x>=n.keys[i])i++;frames.push({root:bp.root,focus:n.keys.join('|'),label:'Visit separators ['+n.keys.join(' | ')+']',text:'Compare '+x+' and descend to child '+(i+1)+'.'});n=n.children[i];}const found=n.keys.includes(x),leaf=bpLeaves().indexOf(n);frames.push({root:bp.root,focus:n.keys.join('|'),leaf,key:found?x:null,label:found?'Found '+x+' in the target leaf.':'Reach target leaf ['+n.keys.join(' | ')+']',text:found?'Search succeeded.':'Search ended here; key '+x+' is absent.'});bpStart(frames);};
   $('bpPrint').onclick=()=>{const leaves=bpLeaves();if(!leaves.length){setMessage('bpMessage','The tree is empty.');return;}bpStart(leaves.map((l,i)=>({root:bp.root,leaf:i,focus:null,label:'Read leaf '+(i+1)+' of '+leaves.length+': ['+l.keys.join(' | ')+']',text:'Move through the linked leaves from left to right.'})).concat([{root:bp.root,leaf:leaves.length-1,label:'Traversal complete.',text:'Sorted keys: '+leaves.flatMap(l=>l.keys).join(' → ')}]));};
