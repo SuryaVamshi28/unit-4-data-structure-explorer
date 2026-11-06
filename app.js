@@ -92,7 +92,7 @@
     all(){const out=[];const walk=n=>{if(!n)return;for(let i=0;i<n.keys.length;i++){if(n.children[i])walk(n.children[i]);out.push(n.keys[i]);}if(n.children[n.keys.length])walk(n.children[n.keys.length]);};walk(this.root);return out;}
   }
 
-  function drawTree(hostId,root,{leafOnly=false,highlight=null,highlightNode=null}={}){
+  function drawTree(hostId,root,{leafOnly=false,leafLinks=false,highlight=null,highlightNode=null}={}){
     const host=$(hostId);if(!host)return;
     if(!root||!root.keys?.length){host.innerHTML='<div class="muted">The tree is empty. Insert a key to start.</div>';return;}
     const nodes=[];let cursor=0,maxDepth=0,maxKeys=1;
@@ -101,8 +101,16 @@
     function place(n,depth){if(!n)return 0;maxDepth=Math.max(maxDepth,depth);let x;if(!n.children||!n.children.length){x=cursor*pitch+pitch/2;cursor++;}else{const xs=n.children.map(c=>place(c,depth+1));x=(xs[0]+xs[xs.length-1])/2;}nodes.push({n,depth,x});return x;}
     place(root,0);const width=Math.max(440,cursor*pitch),height=(maxDepth+1)*88+22;
     const lines=[];for(const item of nodes){const n=item.n;if(n.children)for(const c of n.children){const ch=nodes.find(e=>e.n===c);if(ch)lines.push(`<line x1="${item.x}" y1="${item.depth*88+44}" x2="${ch.x}" y2="${ch.depth*88+10}" stroke="#8ea8c2" stroke-width="2"/>`);}}
+    if(leafLinks){
+      const leaves=nodes.filter(item=>!item.n.children||item.n.children.length===0).sort((a,b)=>a.x-b.x);
+      for(let i=0;i<leaves.length-1;i++){
+        const left=leaves[i],right=leaves[i+1],leftWidth=Math.max(48,left.n.keys.length*42+12),rightWidth=Math.max(48,right.n.keys.length*42+12),y=left.depth*88+26;
+        lines.push(`<line class="leaf-pointer" stroke="#286de0" stroke-width="3" stroke-linecap="round" x1="${left.x+leftWidth/2+2}" y1="${y}" x2="${right.x-rightWidth/2-5}" y2="${y}" marker-end="url(#leafArrow)"><title>Leaf pointer to the next B+ tree leaf</title></line>`);
+      }
+    }
     const boxes=nodes.map(({n,depth,x})=>{const y=depth*88+10,w=Math.max(48,n.keys.length*42+12),left=x-w/2,activeNode=highlightNode===n.keys.join('|');const texts=n.keys.map((k,i)=>`<text x="${left+12+i*42+15}" y="${y+23}" text-anchor="middle" font-size="12" font-family="DM Mono,monospace" fill="${k===highlight?'#c34646':'#204e89'}" font-weight="600">${escapeText(k)}</text>`).join('');return `<g><rect x="${left}" y="${y}" width="${w}" height="32" rx="6" fill="${activeNode?'#ffe7a8':n.children.length?'#eaf1ff':'#f4f8fc'}" stroke="${activeNode?'#e18a14':n.keys.includes(highlight)?'#e27963':'#9db6d3'}" stroke-width="${activeNode?3:1}"/>${n.keys.slice(1).map((_,i)=>`<line x1="${left+42*(i+1)+6}" y1="${y}" x2="${left+42*(i+1)+6}" y2="${y+32}" stroke="#9db6d3"/>`).join('')}${texts}</g>`;}).join('');
-    host.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balanced search tree with ${nodes.length} visible nodes">${lines.join('')}${boxes}</svg>`;
+    const marker=leafLinks?'<defs><marker id="leafArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#286de0"/></marker></defs>':'';
+    host.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balanced search tree with ${nodes.length} visible nodes">${marker}${lines.join('')}${boxes}</svg>`;
   }
 
   let btree=new BTree(3),bHighlight=null,bTimeline=null,bFrame=0,bTimer=null,bSummary='';
@@ -192,7 +200,7 @@
   function stopBP(){if(bpTimer){clearInterval(bpTimer);bpTimer=null;}if($('bpPlay'))$('bpPlay').textContent='Play';}
   function cloneBP(root){const map=new Map();function cp(n){if(!n)return null;const x=new BPNode(n.leaf);x.keys=n.keys.slice();x.children=n.children.map(cp);map.set(n,x);return x;}const copy=cp(root);let cur=root;while(cur&&!cur.leaf)cur=cur.children[0];while(cur){const c=map.get(cur),next=cur.next;c.next=next?map.get(next):null;cur=next;}return copy;}
   function bpLeaves(root=bp.root){let n=root;while(n&&!n.leaf)n=n.children[0];const a=[];while(n){a.push(n);n=n.next;}return a;}
-  function bpDraw(root=bp.root,opt={}){drawTree('bpCanvas',root,{highlightNode:opt.focus||null,highlight:opt.key??null});$('bpLeaves').innerHTML=bpLeaves(root).map((l,i)=>'<span class="leaf '+(i===opt.leaf?'leaf-active':'')+'">['+l.keys.map(escapeText).join(' | ')+']</span>').join('')||'<span class="muted">No leaves yet</span>';}
+  function bpDraw(root=bp.root,opt={}){drawTree('bpCanvas',root,{highlightNode:opt.focus||null,highlight:opt.key??null,leafLinks:true});$('bpLeaves').innerHTML=bpLeaves(root).map((l,i)=>'<span class="leaf '+(i===opt.leaf?'leaf-active':'')+'">['+l.keys.map(escapeText).join(' | ')+']</span>').join('')||'<span class="muted">No leaves yet</span>';}
   function bpShow(i){if(!bpTimeline.length)return;stopBP();bpFrame=Math.max(0,Math.min(i,bpTimeline.length-1));const f=bpTimeline[bpFrame];bpDraw(f.root,f);setMessage('bpFrame','Step '+(bpFrame+1)+' of '+bpTimeline.length+': '+f.label);setMessage('bpMessage',f.text);chips('bpSteps',bpTimeline.slice(0,bpFrame+1).map(x=>x.label));$('bpPrev').disabled=bpFrame===0;$('bpNext').disabled=bpFrame===bpTimeline.length-1;$('bpPlay').disabled=bpFrame===bpTimeline.length-1;$('bpEnd').disabled=bpFrame===bpTimeline.length-1;}
   function bpStart(frames){stopBP();bpTimeline=frames;bpFrame=0;if(frames.length){bpShow(0);if(frames.length>1)$('bpPlay').click();}}
   $('bpInsert').onclick=()=>{const x=safeNumber($('bpInput').value);if(x===null){setMessage('bpMessage','Enter a whole-number key.');return;}const before=cloneBP(bp.root),path=[];let n=bp.root;while(!n.leaf){let i=0;while(i<n.keys.length&&x>=n.keys[i])i++;path.push({root:before,focus:n.keys.join('|'),label:'At internal separators ['+n.keys.join(' | ')+']',text:'Choose child '+(i+1)+' for key '+x+'.'});n=n.children[i];}path.push({root:before,focus:n.keys.join('|'),label:'Reach leaf ['+n.keys.join(' | ')+']',text:'Insert '+x+' in sorted leaf order; split on overflow if needed.'});const r=bp.insert(x),after=cloneBP(bp.root);path.push({root:after,focus:null,label:'Insertion complete.',text:r.steps.join(' ')});bpStart(path);};
